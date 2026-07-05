@@ -148,7 +148,7 @@ This dynamically highlights the optimal strategy in the comparison table with a 
 
 ---
 
-## 💬 Viva Questions & Answers (Academic Defense)
+## 💬 Questions & Answers
 
 ### Q1: How does combining the Priority Queue with the Knapsack Algorithm minimize total distance traveled?
 *   **The Problem in Naive Routing**: Traditional systems visit all $25$ bins on a fixed sequence. Even if only $4$ bins are full, the truck traverses the entire city.
