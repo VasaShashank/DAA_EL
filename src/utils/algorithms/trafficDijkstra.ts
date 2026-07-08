@@ -159,3 +159,25 @@ export function trafficAwareDijkstra(
     },
   };
 }
+
+export function buildTrafficAwareDistanceMatrix(
+  nodesOfInterest: NodeId[],
+  nodes: Node[],
+  edges: Edge[]
+): Map<NodeId, Map<NodeId, number>> {
+  const matrix = new Map<NodeId, Map<NodeId, number>>();
+
+  for (const start of nodesOfInterest) {
+    matrix.set(start, new Map());
+    for (const end of nodesOfInterest) {
+      if (start === end) {
+        matrix.get(start)!.set(end, 0);
+      } else {
+        const { totalCost } = trafficAwareDijkstra(start, end, nodes, edges);
+        matrix.get(start)!.set(end, totalCost);
+      }
+    }
+  }
+
+  return matrix;
+}

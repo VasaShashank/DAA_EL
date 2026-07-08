@@ -36,6 +36,15 @@ export const DecisionTreePage: React.FC = () => {
     });
   }, [truckFull, destinationCount, highTraffic]);
 
+  const getNodeLabel = (node: DecisionTreeNode) => {
+    if (!node.result) return node.condition || 'Route Order';
+    return node.result
+      .replace('Branch & Bound TSP + Traffic-Aware Dijkstra', 'B&B TSP + Traffic Dijkstra')
+      .replace('Branch & Bound TSP + Dijkstra', 'B&B TSP + Dijkstra')
+      .replace('Greedy Nearest Neighbor TSP + Traffic-Aware Dijkstra', 'Greedy TSP + Traffic Dijkstra')
+      .replace('Greedy Nearest Neighbor TSP + Dijkstra', 'Greedy TSP + Dijkstra');
+  };
+
   // Layout decision tree as a top-down tree
   const renderDecisionTree = () => {
     const nodeMap = new Map<string, DecisionTreeNode>(treeNodes.map(n => [n.id, n]));
@@ -54,8 +63,14 @@ export const DecisionTreePage: React.FC = () => {
       levelWidths[curr.level] = (levelWidths[curr.level] || 0) + 1;
 
       const spread = Math.max(1, 3.2 - curr.level * 1.1);
-      if (node.yesChild) queue.push({ id: node.yesChild, level: curr.level + 1, col: curr.col - spread });
-      if (node.noChild) queue.push({ id: node.noChild, level: curr.level + 1, col: curr.col + spread });
+      if (node.yesChild && node.noChild) {
+        queue.push({ id: node.yesChild, level: curr.level + 1, col: curr.col - spread });
+        queue.push({ id: node.noChild, level: curr.level + 1, col: curr.col + spread });
+      } else if (node.yesChild) {
+        queue.push({ id: node.yesChild, level: curr.level + 1, col: curr.col });
+      } else if (node.noChild) {
+        queue.push({ id: node.noChild, level: curr.level + 1, col: curr.col });
+      }
     }
 
     const maxLevel = Math.max(...Object.keys(levelWidths).map(Number), 0);
@@ -98,31 +113,32 @@ export const DecisionTreePage: React.FC = () => {
           const isOnPath = animatedPath.includes(node.id);
           const isLeaf = node.result !== null && node.yesChild === null;
           const isResult = result && result.traversalPath[result.traversalPath.length - 1] === node.id;
+          const width = isLeaf ? 170 : 130;
 
           return (
             <g key={node.id} transform={`translate(${pos.x},${pos.y})`}>
               {isLeaf ? (
                 <>
-                  <rect x="-55" y="-18" width="110" height="36" rx="8"
+                  <rect x={-width / 2} y="-18" width={width} height="36" rx="8"
                     fill={isOnPath ? (isResult ? '#14532d' : '#0c4a6e') : '#1e293b'}
                     stroke={isResult ? '#4ade80' : isOnPath ? '#38bdf8' : '#334155'}
                     strokeWidth={isOnPath ? 2.5 : 1.5}
                     className="transition-all duration-300" />
                   <text y="5" textAnchor="middle" fontSize="9" fontWeight="700"
                     fill={isResult ? '#4ade80' : isOnPath ? '#38bdf8' : 'white'} fontFamily="Inter">
-                    {node.result}
+                    {getNodeLabel(node)}
                   </text>
                 </>
               ) : (
                 <>
-                  <rect x="-55" y="-18" width="110" height="36" rx="18"
+                  <rect x={-width / 2} y="-18" width={width} height="36" rx="18"
                     fill={isOnPath ? '#4c1d95' : '#1e293b'}
                     stroke={isOnPath ? '#a78bfa' : '#334155'}
                     strokeWidth={isOnPath ? 2.5 : 1.5}
                     className="transition-all duration-300" />
                   <text y="5" textAnchor="middle" fontSize="9" fontWeight="600"
                     fill={isOnPath ? '#a78bfa' : '#94a3b8'} fontFamily="Inter">
-                    {node.condition}
+                    {getNodeLabel(node)}
                   </text>
                 </>
               )}
@@ -197,7 +213,7 @@ export const DecisionTreePage: React.FC = () => {
                   className="w-16 bg-dark-800/60 rounded px-2 py-1 text-sm text-white font-mono text-center border border-dark-700/30 outline-none" />
               </label>
               <label className="flex items-center justify-between">
-                <span className="text-xs text-dark-500">Truck Full?</span>
+                <span className="text-xs text-dark-500">Demand &gt; Capacity?</span>
                 <button onClick={() => setTruckFull(!truckFull)}
                   className={`w-10 h-5 rounded-full transition-all ${truckFull ? 'bg-accent-green' : 'bg-dark-700'}`}>
                   <div className={`w-4 h-4 rounded-full bg-white shadow transition-all ${truckFull ? 'ml-5' : 'ml-0.5'}`} />

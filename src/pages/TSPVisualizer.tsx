@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useSimulationStore } from '../store';
 import { branchAndBoundTSP, nearestNeighborTSP } from '../utils/algorithms/branchAndBound';
-import { buildDistanceMatrix } from '../utils/algorithms/dijkstra';
+import { buildDistanceMatrix, dijkstra } from '../utils/algorithms/dijkstra';
+import { buildTrafficAwareDistanceMatrix, trafficAwareDijkstra } from '../utils/algorithms/trafficDijkstra';
 import type { NodeId, BranchAndBoundNode, AlgorithmStats } from '../types';
 import { PlaybackControls } from '../components/visualizers/PlaybackControls';
 import { StatsPanel } from '../components/visualizers/StatsPanel';
@@ -42,6 +43,8 @@ export const TSPVisualizer: React.FC = () => {
   const [speed, setSpeed] = useState(1);
   const [visibleNodes, setVisibleNodes] = useState(0);
   const [usedBB, setUsedBB] = useState(true);
+  const [useHighTraffic, setUseHighTraffic] = useState(false);
+  const [expandedRoutePath, setExpandedRoutePath] = useState<NodeId[]>([]);
 
   useEffect(() => { if (nodes.length === 0) generateCity(); }, [nodes.length, generateCity]);
 
@@ -52,39 +55,70 @@ export const TSPVisualizer: React.FC = () => {
     );
     setStateTree([]);
     setOptimalRoute([]);
+    setExpandedRoutePath([]);
     setStats(null);
   };
 
+  const expandRouteWithShortestPaths = useCallback((route: NodeId[], trafficAware: boolean) => {
+    const expanded: NodeId[] = [];
+
+    for (let i = 0; i < route.length - 1; i++) {
+      const start = route[i];
+      const end = route[i + 1];
+      const segment = trafficAware
+        ? trafficAwareDijkstra(start, end, nodes, edges).path
+        : dijkstra(start, end, nodes, edges).path;
+
+      if (segment.length === 0) continue;
+      expanded.push(...(expanded.length > 0 ? segment.slice(1) : segment));
+    }
+
+    return expanded;
+  }, [nodes, edges]);
+
   const runAlgorithm = useCallback(() => {
     if (selectedBins.length === 0) return;
-    const distMatrix = buildDistanceMatrix([0, ...selectedBins], nodes, edges);
+    const distMatrix = useHighTraffic
+      ? buildTrafficAwareDistanceMatrix([0, ...selectedBins], nodes, edges)
+      : buildDistanceMatrix([0, ...selectedBins], nodes, edges);
+    let runStats: AlgorithmStats;
 
     if (selectedBins.length <= 8) {
       const result = branchAndBoundTSP(0, selectedBins, distMatrix);
       setStateTree(result.stateTree);
       setOptimalRoute(result.optimalRoute);
-      setStats(result.stats);
+      setExpandedRoutePath(expandRouteWithShortestPaths(result.optimalRoute, useHighTraffic));
+      runStats = {
+        ...result.stats,
+        algorithmName: useHighTraffic
+          ? 'Branch & Bound TSP + Traffic-Aware Dijkstra'
+          : 'Branch & Bound TSP + Dijkstra',
+      };
+      setStats(runStats);
       setVisibleNodes(0);
       setCurrentStep(0);
       setUsedBB(true);
     } else {
       const result = nearestNeighborTSP(0, selectedBins, distMatrix);
       setOptimalRoute(result.route);
-      setStats(result.stats);
+      setExpandedRoutePath(expandRouteWithShortestPaths(result.route, useHighTraffic));
+      runStats = {
+        ...result.stats,
+        algorithmName: useHighTraffic
+          ? 'Greedy Nearest Neighbor TSP + Traffic-Aware Dijkstra'
+          : 'Greedy Nearest Neighbor TSP + Dijkstra',
+      };
+      setStats(runStats);
       setStateTree([]);
       setUsedBB(false);
     }
-
-    const runStats = selectedBins.length <= 8
-      ? branchAndBoundTSP(0, selectedBins, distMatrix).stats
-      : nearestNeighborTSP(0, selectedBins, distMatrix).stats;
 
     useSimulationStore.getState().addAlgorithmRun({
       id: Math.random().toString(),
       timestamp: new Date(),
       stats: runStats,
     });
-  }, [selectedBins, nodes, edges]);
+  }, [selectedBins, nodes, edges, useHighTraffic, expandRouteWithShortestPaths]);
 
   // Playback for state tree animation
   useEffect(() => {
@@ -165,8 +199,8 @@ export const TSPVisualizer: React.FC = () => {
   };
 
   const isEdgeInRoute = (src: number, tgt: number) => {
-    for (let i = 0; i < optimalRoute.length - 1; i++) {
-      if ((optimalRoute[i] === src && optimalRoute[i+1] === tgt) || (optimalRoute[i] === tgt && optimalRoute[i+1] === src))
+    for (let i = 0; i < expandedRoutePath.length - 1; i++) {
+      if ((expandedRoutePath[i] === src && expandedRoutePath[i+1] === tgt) || (expandedRoutePath[i] === tgt && expandedRoutePath[i+1] === src))
         return true;
     }
     return false;
@@ -183,10 +217,30 @@ export const TSPVisualizer: React.FC = () => {
           </span>
         </div>
         <div className="flex items-center gap-3">
-          <button onClick={() => setSelectedBins([])} className="btn-ghost text-xs py-1.5">Clear</button>
+          <button onClick={() => {
+            setSelectedBins([]);
+            setExpandedRoutePath([]);
+          }} className="btn-ghost text-xs py-1.5">Clear</button>
+          <button
+            onClick={() => {
+              setUseHighTraffic(value => !value);
+              setStateTree([]);
+              setOptimalRoute([]);
+              setExpandedRoutePath([]);
+              setStats(null);
+            }}
+            className={`text-xs py-1.5 px-3 rounded-lg border transition-all ${
+              useHighTraffic
+                ? 'bg-accent-orange/20 border-accent-orange/50 text-accent-orange'
+                : 'bg-dark-800/60 border-dark-700/40 text-dark-500'
+            }`}
+          >
+            High Traffic: {useHighTraffic ? 'On' : 'Off'}
+          </button>
           <button onClick={() => {
             const bins = nodes.filter(n => !n.isDepot).slice(0, 6).map(n => n.id);
             setSelectedBins(bins);
+            setExpandedRoutePath([]);
           }} className="btn-ghost text-xs py-1.5">Auto Select 6</button>
           <button onClick={runAlgorithm} className="btn-primary py-1.5" disabled={selectedBins.length === 0}>
             Run TSP

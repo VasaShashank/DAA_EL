@@ -4,6 +4,7 @@
  */
 import type { Node, Edge, NodeId } from '../types';
 import { dijkstra, buildDistanceMatrix as buildDistMatrix } from './algorithms/dijkstra';
+import { buildTrafficAwareDistanceMatrix as buildTrafficDistMatrix } from './algorithms/trafficDijkstra';
 import { nearestNeighborTSP, naiveTSP } from './algorithms/branchAndBound';
 
 export function calculatePriority(node: Node): number {
@@ -49,8 +50,12 @@ export function getShortestPath(
 export function buildDistanceMatrix(
   nodesOfInterest: NodeId[],
   nodes: Node[],
-  edges: Edge[]
+  edges: Edge[],
+  trafficAware = false
 ): Map<NodeId, Map<NodeId, number>> {
+  if (trafficAware) {
+    return buildTrafficDistMatrix(nodesOfInterest, nodes, edges);
+  }
   return buildDistMatrix(nodesOfInterest, nodes, edges);
 }
 
